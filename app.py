@@ -4,7 +4,26 @@ import streamlit as st
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from crewai import Agent, Task, Crew, Process, LLM
+from crewai.tools import tool
 from crewai_tools import SerperDevTool, FileWriterTool
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+
+# Resolve paths relative to this script's location, not the current working
+# directory, so the app behaves the same no matter where `streamlit run` is
+# launched from.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(APP_DIR, "data")
+ANSWERS_FILE = os.path.join(APP_DIR, "answers.txt")
+
+SUGGESTED_QUESTIONS = [
+    "How do I reset my password?",
+    "What is your refund policy?",
+    "What is the latest version of Python?",
+    "What are today's top tech news headlines?",
+]
 
 
 class AnswerOutput(BaseModel):
@@ -21,8 +40,8 @@ missing_keys = [
     key for key in ("OPENAI_API_KEY", "SERPER_API_KEY") if not os.getenv(key)
 ]
 
-st.set_page_config(page_title="CrewAI - Multi-Agent Support", page_icon="🛟")
-st.title("🛟 CrewAI - Multi-Agent Support")
+st.set_page_config(page_title="Multi-Agent Customer Support", page_icon="🛟")
+st.title("🛟 Multi-Agent Customer Support")
 st.write("Ask a question and three agents will work together to answer it.")
 
 if missing_keys:
@@ -36,17 +55,79 @@ llm = LLM(model="gpt-4o-mini")
 search_tool = SerperDevTool()
 file_writer_tool = FileWriterTool()
 
+
+# ---------------- Knowledge base (RAG) ----------------
+# Builds a FAISS vector store from the .txt files in ./data so the Assistant
+# can answer from the company's own knowledge base (RAG) instead of only
+# generic model knowledge. Cached with st.cache_resource so it's built once
+# per app process, not rebuilt on every query. NOTE: this cache is shared
+# across all users of the running app - if you edit files in data/, use the
+# "Reload knowledge base" button below (or restart the app) to pick them up.
+@st.cache_resource(show_spinner="Loading knowledge base...")
+def build_vector_db():
+    if not os.path.isdir(DATA_DIR):
+        raise FileNotFoundError(
+            "No 'data' folder found. Add your .txt knowledge base files to a "
+            "'data' folder next to app.py."
+        )
+
+    loader = DirectoryLoader(
+        DATA_DIR,
+        glob="**/*.txt",
+        loader_cls=TextLoader,
+        loader_kwargs={"autodetect_encoding": True},
+    )
+    docs = loader.load()
+
+    if not docs:
+        raise ValueError(
+            "No .txt files found in the 'data' folder. Add at least one "
+            "knowledge base document."
+        )
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
+    chunks = splitter.split_documents(docs)
+
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    return FAISS.from_documents(chunks, embeddings)
+
+
+try:
+    vector_db = build_vector_db()
+except Exception as e:
+    st.error(f"Could not load the knowledge base: {e}")
+    st.stop()
+
+with st.sidebar:
+    st.caption("Knowledge base")
+    if st.button("🔄 Reload knowledge base"):
+        build_vector_db.clear()  # clear this function's cached result
+        st.rerun()
+
+
+@tool("Customer Support Knowledge Base")
+def knowledge_base_tool(query: str) -> str:
+    """Search company FAQs, policies, pricing, refund rules, product
+    documentation, and other customer support knowledge base content."""
+    results = vector_db.similarity_search(query, k=4)
+    return "\n\n".join(doc.page_content for doc in results)
+
+
 # ---------------- Agents ----------------
 
 assistant = Agent(
     role="Assistant",
-    goal="Answer the user's query directly using your own knowledge",
+    goal="Answer the user's query directly using the company knowledge base",
     backstory=(
         "You are a helpful customer support assistant. You answer questions "
-        "using only what you already know, without searching the internet."
+        "using only the company's own knowledge base (FAQs, policies, product "
+        "docs) via the Customer Support Knowledge Base tool - never the open "
+        "internet. If the knowledge base doesn't cover it, say so honestly."
     ),
+    tools=[knowledge_base_tool],
     llm=llm,
     verbose=True,
+    allow_delegation=False,
 )
 
 web_search_assistant = Agent(
@@ -76,8 +157,17 @@ entry_agent = Agent(
 # ---------------- Tasks ----------------
 
 task_assistant = Task(
-    description="Answer this user query directly, using only your own knowledge: {query}",
-    expected_output="A clear, direct answer to the query, in the 'answer' field.",
+    description=(
+        "Search the company knowledge base for this query using the Customer "
+        "Support Knowledge Base tool and answer it based only on what you find "
+        "there: {query}\n\n"
+        "Do not hallucinate. If the knowledge base doesn't cover it, say so "
+        "honestly and suggest contacting the support team."
+    ),
+    expected_output=(
+        "A clear, friendly, professional answer based only on the knowledge "
+        "base, in the 'answer' field."
+    ),
     agent=assistant,
     output_pydantic=AnswerOutput,
 )
@@ -93,9 +183,10 @@ task_entry = Task(
     description=(
         "The original query was: {query}\n\n"
         "You will also receive two structured outputs: the Assistant's 'answer' "
-        "field and the Web Search Assistant's 'answer' field. Use the file writer "
-        "tool to save all three into a file named 'answers.txt' (overwrite it each "
-        "run) in this exact format:\n\n"
+        "field (from the knowledge base) and the Web Search Assistant's 'answer' "
+        f"field. Use the file writer tool to save all three into a file named "
+        f"'answers.txt' in the directory '{APP_DIR}' (overwrite it each run) in "
+        "this exact format:\n\n"
         "Query: {query}\n"
         "Assistant Answer: <assistant's answer field>\n"
         "Web Search Answer: <web search assistant's answer field>\n\n"
@@ -117,7 +208,17 @@ crew = Crew(
 
 # ---------------- Streamlit UI ----------------
 
-query = st.text_input("Enter your query or task:")
+if "query_input" not in st.session_state:
+    st.session_state.query_input = ""
+
+st.write("**Try one of these, or type your own:**")
+suggestion_cols = st.columns(len(SUGGESTED_QUESTIONS))
+for col, suggestion in zip(suggestion_cols, SUGGESTED_QUESTIONS):
+    if col.button(suggestion):
+        st.session_state.query_input = suggestion
+        st.rerun()
+
+query = st.text_input("Enter your query or task:", key="query_input")
 
 if st.button("Submit"):
     if not query.strip():
@@ -146,7 +247,7 @@ if st.button("Submit"):
     web_search_answer = get_answer(task_web_search)
 
     if assistant_answer:
-        st.subheader("Assistant Answer")
+        st.subheader("Assistant Answer (Knowledge Base)")
         st.write(assistant_answer)
     else:
         st.warning("The Assistant did not return an answer.")
@@ -157,7 +258,7 @@ if st.button("Submit"):
     else:
         st.warning("The Web Search Assistant did not return an answer.")
 
-    if os.path.exists("answers.txt"):
+    if os.path.exists(ANSWERS_FILE):
         st.success("Both answers were saved to answers.txt")
     else:
         st.warning("The Entry Agent finished, but answers.txt was not found.")
