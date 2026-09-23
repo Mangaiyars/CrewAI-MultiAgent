@@ -1,0 +1,22 @@
+Frequently Asked Questions
+
+Q: How do I reset my password?
+A: Go to the login page and click "Forgot password". Enter your registered email
+address and we will send you a reset link that is valid for 30 minutes.
+
+Q: How do I contact customer support?
+A: You can reach our support team via email at support@example.com or through
+the in-app chat, available Monday to Friday, 9 AM to 6 PM IST.
+
+Q: What is your refund policy?
+A: We offer a full refund within 14 days of purchase if you are not satisfied,
+as long as the product has not been used beyond the trial limits. Refunds are
+processed within 5-7 business days.
+
+Q: How much does the Pro plan cost?
+A: The Pro plan costs $19 per month or $190 per year (2 months free) and
+includes unlimited projects, priority support, and advanced analytics.
+
+Q: Can I cancel my subscription anytime?
+A: Yes, you can cancel anytime from Account Settings > Billing. You will
+continue to have access until the end of your current billing period.
