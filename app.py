@@ -259,6 +259,12 @@ if st.button("Submit"):
         st.warning("The Web Search Assistant did not return an answer.")
 
     if os.path.exists(ANSWERS_FILE):
-        st.success("Both answers were saved to answers.txt")
+        st.success(f"Both answers were saved to {ANSWERS_FILE}")
     else:
-        st.warning("The Entry Agent finished, but answers.txt was not found.")
+        st.error(
+            "The Entry Agent finished, but answers.txt was not found at "
+            f"{ANSWERS_FILE}. This usually means the file writer tool call "
+            "failed or wrote to a different location. Check the terminal logs "
+            "for the Entry Agent's tool call output, and confirm the app has "
+            "write permission to this folder."
+        )

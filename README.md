@@ -18,7 +18,19 @@ Two sample files (`data/faq.txt`, `data/policies.txt`) are included so the app w
 
 ### Suggested questions
 
-A row of clickable example questions appears above the input box, covering both knowledge-base topics (password reset, refund policy) and web-search topics (latest Python version, today's tech news) — useful for quickly demonstrating both agents' behavior.
+A row of clickable example questions appears above the input box, covering both knowledge-base topics and web-search topics — useful for quickly demonstrating both agents' behavior:
+
+| Query | Answered by | Why it's a good test |
+|---|---|---|
+| "How do I reset my password?" | Knowledge base | Direct FAQ match in `data/faq.txt` |
+| "What is your refund policy?" | Knowledge base | Direct policy match in `data/faq.txt` |
+| "What is your data retention policy?" | Knowledge base | Match in `data/policies.txt` |
+| "How much does the Pro plan cost?" | Knowledge base | Pricing lookup from FAQ |
+| "What is the latest version of Python?" | Web search | Not in the knowledge base — shows live web search working |
+| "What are today's top tech news headlines?" | Web search | Time-sensitive, requires real internet access |
+| "What's the current price of Bitcoin?" | Web search | Another clear case only the web-search agent can answer |
+
+Only the first four are wired up as clickable buttons in the UI by default (see `SUGGESTED_QUESTIONS` in `app.py`) — add more of the above, or your own, to that list if you want a longer row of suggestions.
 
 ## Setup
 
