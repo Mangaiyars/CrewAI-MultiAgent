@@ -1,0 +1,19 @@
+Company Policies
+
+Shipping Policy: Orders are processed within 1-2 business days. Standard
+shipping takes 5-7 business days within the country and 10-15 business days
+for international orders. Express shipping is available at checkout for an
+additional fee.
+
+Privacy Policy: We collect only the data necessary to provide our service,
+such as your name, email, and billing information. We never sell your data
+to third parties. You can request deletion of your account and data at any
+time by contacting privacy@example.com.
+
+Data Retention: Account data is retained for as long as your account is
+active. If you cancel your account, your data is retained for 30 days in
+case you wish to reactivate, after which it is permanently deleted.
+
+Security: All data is encrypted in transit using TLS and at rest using
+AES-256. We conduct regular security audits and follow industry-standard
+practices to protect customer data.
